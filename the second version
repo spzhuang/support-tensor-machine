@@ -85,7 +85,7 @@ class stm():
                      s_vector[svm.support_] = svm.support_vectors_
                      w = np.zeros(shape)
                      for i in range(self.data_L):
-                         w += z[i]*self.label[i]*s_vector[i]
+                         w += z[i]*s_vector[i]
                      self.v = w
                 if i == 1:
                      tem_data = list()
@@ -104,7 +104,7 @@ class stm():
                      s_vector[svm.support_] = svm.support_vectors_
                      w = np.zeros(shape)
                      for i in range(self.data_L):
-                         w += z[i]*self.label[i]*s_vector[i]
+                         w += z[i]*s_vector[i]
                      self.u = w
                      SupTensor = dict()
                      SupTensorIndex= list(svm.support_)                 # save the support vectors, 
