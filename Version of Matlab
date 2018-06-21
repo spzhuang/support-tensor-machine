@@ -1,0 +1,130 @@
+classdef STM2
+    %STM is a algrithm can classificate samples
+    %  STM is short for the whole name "support tensor machine"
+    properties(SetAccess = 'protected',GetAccess = 'public')
+        data 
+        label
+        tol 
+        max_iter  
+        Boxconstrn
+        properties_set
+        data_L
+        ns1
+        ns2
+        u
+        v
+        Error 
+        coef_tensor
+        SupportTensor
+        SupportTensorIndex
+        bias    
+    end
+    methods
+        function obj = STM2(data,label,varargin)          % 初始化一些值，这些值由输入的数据所产生
+            % 导入样本数据以及相应的标签
+            %   此处显示详细说明
+            if nargin < 2
+                eroor('You need to input data and labels at least ! ')
+            end
+            if nargin < 3; obj.tol = 0.001; end
+            if nargin < 4; obj.max_iter = 200; end
+            if nargin < 5; obj.Boxconstrn = 1; end
+            if nargin >= 6 ; error('Numbers of parameters can''t more than 5! '); end
+            obj.data = data;
+            obj.label = label;
+            obj.ns1 = size(data{1},1);
+            obj.ns2 = size(data{1},2);
+            obj.data_L = size(label,2);             % Over obj.data obj.label obj.tol obj.max_iter obj.Boxconstrn obj.ns1 obj.ns2 obj.data_L
+            obj.u = ones(obj.ns1,1);
+            obj.v = ones(obj.ns2,1);
+            U = ones(obj.ns1,1);
+            V = ones(obj.ns2,1);
+            obj.Error = 10;
+            inde = 1;
+            val = cell(1,7);
+            Error = 10;
+            while Error>obj.tol && inde < obj.max_iter
+                    old_norm = norm(U*V');
+                    for i = 1:2
+                        if i == 1
+                            tem_data = zeros(obj.data_L,obj.ns2);
+                            for j = 1:obj.data_L
+                                tem_data(j,:) = U' * obj.data{j};
+                            end
+                            norm_u = norm(U);
+                            svm = fitcsvm(tem_data,obj.label,'BoxConstrain',obj.Boxconstrn/norm_u,'KernelFunction','linear');
+                            s_vector = svm.SupportVectors;
+                            s_alpha = svm.Alpha;
+                            s_label = svm.SupportVectorLabels;
+                            w = sum(s_alpha.*s_label.*s_vector);       % 得到支持向量的系数
+                            V = w';
+                        elseif  i==2 
+                            tem_data = zeros(obj.data_L,obj.ns1);
+                            for j = 1:obj.data_L
+                                tem_data(j,:) = (obj.data{j}*V)';
+                            end
+                            norm_v = norm(V);
+                            svm = fitcsvm(tem_data,obj.label,'BoxConstrain',obj.Boxconstrn/norm_v,'KernelFunction','linear');
+                            s_vector = svm.SupportVectors;
+                            s_alpha = svm.Alpha;
+                            s_label = svm.SupportVectorLabels;
+                            w = sum(s_alpha.*s_label.*s_vector);
+                            U = w';
+                            [s_long,~] = size(s_label);
+                            index_address = zeros(1,s_long);
+                            for k = 1:s_long
+                                for m = 1:obj.data_L
+                                    if all(s_vector(k,:) == tem_data(m,:))
+                                        index_address(k) = m;
+                                        break
+                                    else
+                                        continue
+                                    end
+                                end
+                            end
+                            Tensor = cell(1,s_long);
+                            for k = 1:s_long
+                                Tensor{k} = obj.data{index_address(k)};
+                            end
+                        end
+                    end
+                    Coef = U*V';            % val{4} = obj.coef_tensor
+                    SupTensor = Tensor;                    % val{5} = obj.SupportTensor
+                    SupIndex = index_address;         % val{6} = obj.SupportTensorIndex
+                    Error = abs(old_norm - norm(Coef));
+                    if inde >= 1
+                        fprintf('迭代次数 = %d\n',inde)
+                        fprintf('迭代误差 = %f\n',Error)
+                    end
+                    inde = inde + 1;
+            end   
+            val{1} = Error; val{2} = U; val{3} = V; val{4} =  Coef; val{5} = SupTensor; val{6} = SupIndex;
+            bbias = zeros(1,s_long);
+            for i = 1:s_long
+                to = SupIndex(i);
+                bbias(i) = obj.label(to) - (U' * SupTensor{i} *V );
+            end
+            val{7} = mean(bbias);            % val{7} = obj.bias
+            obj.Error = val{1};obj.u = val{2}; obj.v = val{3}; obj.coef_tensor = val{4};
+            obj.SupportTensor = val{5}; obj.SupportTensorIndex = val{6};  obj.bias = val{7};
+        end
+    end
+    methods
+        function pred=predict(obj,z)
+            pred = sum(sum(z.*obj.coef_tensor)) + obj.bias;
+        end
+        function getscore = score(obj,test,test_label)
+            [~,L] = size(test_label);
+            flag = 0;
+            sto = zeros(1,L);
+            for i = 1:L
+                sto(i) = sign(obj.predict(test{i}));
+                if sto(i) == test_label(i)
+                    flag = flag + 1;
+                end
+            end
+           getscore= flag / L;
+            fprintf('准确率%.2f',getscore);
+        end
+    end
+end
