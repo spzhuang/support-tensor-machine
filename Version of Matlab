@@ -1,13 +1,20 @@
-classdef STM2
+classdef STM3
     %STM is a algrithm can classificate samples
     %  STM is short for the whole name "support tensor machine"
+    %  You need to start it with some data(a set consist of matrix) and
+    %  corresponding labels
+    %  STM has the following methods:
+    %  1:predict(z): output the classification of z, z is a sample.
+    %  2:score(test,test_label): get the accuary of test data, you need to
+    %    input test and corresponding labels.
+    %  3:pretty_predict(test,test_label): get the table consist of number
+    %    of samples, the predicted labels and the real labels.
     properties(SetAccess = 'protected',GetAccess = 'public')
         data 
         label
         tol 
         max_iter  
         Boxconstrn
-        properties_set
         data_L
         ns1
         ns2
@@ -20,11 +27,12 @@ classdef STM2
         bias    
     end
     methods
-        function obj = STM2(data,label,varargin)          % 初始化一些值，这些值由输入的数据所产生
-            % 导入样本数据以及相应的标签
-            %   此处显示详细说明
+        function obj = STM3(data,label,varargin)          % initial some value by inputing data
+            % data = the data we inputing ,data should be cell and the samples should be matrix 
+            % label = the data's label we inputing
+            % varargin are ordly tol(the tolerance of algrithm), max_iter(maximum iteration), Boxconstrn (the punishment coefficient of svm models) 
             if nargin < 2
-                eroor('You need to input data and labels at least ! ')
+                error('You need to input data and labels at least ! ')
             end
             if nargin < 3; obj.tol = 0.001; end
             if nargin < 4; obj.max_iter = 200; end
@@ -37,39 +45,36 @@ classdef STM2
             obj.data_L = size(label,2);             % Over obj.data obj.label obj.tol obj.max_iter obj.Boxconstrn obj.ns1 obj.ns2 obj.data_L
             obj.u = ones(obj.ns1,1);
             obj.v = ones(obj.ns2,1);
-            U = ones(obj.ns1,1);
-            V = ones(obj.ns2,1);
             obj.Error = 10;
             inde = 1;
-            val = cell(1,7);
-            Error = 10;
-            while Error>obj.tol && inde < obj.max_iter
-                    old_norm = norm(U*V');
+            obj.Error = 10;
+            while obj.Error>obj.tol && inde < obj.max_iter
+                    old_norm = norm(obj.u*obj.v');
                     for i = 1:2
                         if i == 1
                             tem_data = zeros(obj.data_L,obj.ns2);
                             for j = 1:obj.data_L
-                                tem_data(j,:) = U' * obj.data{j};
+                                tem_data(j,:) = obj.u' * obj.data{j};
                             end
-                            norm_u = norm(U);
+                            norm_u = norm(obj.u);
                             svm = fitcsvm(tem_data,obj.label,'BoxConstrain',obj.Boxconstrn/norm_u,'KernelFunction','linear');
                             s_vector = svm.SupportVectors;
                             s_alpha = svm.Alpha;
                             s_label = svm.SupportVectorLabels;
-                            w = sum(s_alpha.*s_label.*s_vector);       % 得到支持向量的系数
-                            V = w';
+                            w = sum(s_alpha.*s_label.*s_vector);       % get the coefficient of support tensors
+                            obj.v = w';
                         elseif  i==2 
                             tem_data = zeros(obj.data_L,obj.ns1);
                             for j = 1:obj.data_L
-                                tem_data(j,:) = (obj.data{j}*V)';
+                                tem_data(j,:) = (obj.data{j}*obj.v)';
                             end
-                            norm_v = norm(V);
+                            norm_v = norm(obj.v);
                             svm = fitcsvm(tem_data,obj.label,'BoxConstrain',obj.Boxconstrn/norm_v,'KernelFunction','linear');
                             s_vector = svm.SupportVectors;
                             s_alpha = svm.Alpha;
                             s_label = svm.SupportVectorLabels;
                             w = sum(s_alpha.*s_label.*s_vector);
-                            U = w';
+                            obj.u = w';
                             [s_long,~] = size(s_label);
                             index_address = zeros(1,s_long);
                             for k = 1:s_long
@@ -88,25 +93,18 @@ classdef STM2
                             end
                         end
                     end
-                    Coef = U*V';            % val{4} = obj.coef_tensor
-                    SupTensor = Tensor;                    % val{5} = obj.SupportTensor
-                    SupIndex = index_address;         % val{6} = obj.SupportTensorIndex
-                    Error = abs(old_norm - norm(Coef));
-                    if inde >= 1
-                        fprintf('迭代次数 = %d\n',inde)
-                        fprintf('迭代误差 = %f\n',Error)
-                    end
+                    obj.coef_tensor = obj.u*obj.v';            % val{4} = obj.coef_tensor
+                    obj.SupportTensor = Tensor;                    % val{5} = obj.SupportTensor
+                    obj.SupportTensorIndex = index_address;         % val{6} = obj.SupportTensorIndex
+                    obj.Error = abs(old_norm - norm(obj.coef_tensor));
                     inde = inde + 1;
             end   
-            val{1} = Error; val{2} = U; val{3} = V; val{4} =  Coef; val{5} = SupTensor; val{6} = SupIndex;
             bbias = zeros(1,s_long);
             for i = 1:s_long
-                to = SupIndex(i);
-                bbias(i) = obj.label(to) - (U' * SupTensor{i} *V );
+                to = obj.SupportTensorIndex(i);
+                bbias(i) = obj.label(to) - (obj.u' * obj.SupportTensor{i} *obj.v );
             end
-            val{7} = mean(bbias);            % val{7} = obj.bias
-            obj.Error = val{1};obj.u = val{2}; obj.v = val{3}; obj.coef_tensor = val{4};
-            obj.SupportTensor = val{5}; obj.SupportTensorIndex = val{6};  obj.bias = val{7};
+            obj.bias = mean(bbias);
         end
     end
     methods
@@ -124,7 +122,25 @@ classdef STM2
                 end
             end
            getscore= flag / L;
-            fprintf('准确率%.2f',getscore);
+            fprintf('accuracy = %.2f',getscore);
+        end
+        function [Tab,p] = pretty_predict(obj,test,test_label)
+            if size(test_label,1) ~= 1
+                error('the size of test_label must be 1*N! please transpose your label !')
+            end
+            L = size(test_label,2);
+            flag = 0;
+            pre_accuary = zeros(L,1);
+            for i = 1:L
+                pre_accuary(i) = sign(obj.predict(test{i}));
+                if pre_accuary(i) == test_label(i)
+                    flag = flag + 1;
+                end
+            end
+            p = flag/L;
+            times = [1:L]';
+            Label = test_label';
+            Tab = table(times,pre_accuary,Label);
         end
     end
 end
